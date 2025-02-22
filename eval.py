@@ -6,11 +6,13 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 from dataclasses import dataclass, asdict
+from dotenv import load_dotenv
 
 from dataset import load_dataset, get_formatted_questions
 from model import get_completion
 from answer_evaluator import get_final_selection
 
+load_dotenv()
 
 @dataclass
 class EvalResult:
