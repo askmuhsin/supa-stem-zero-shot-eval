@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import hashlib
 import argparse
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -9,8 +10,8 @@ from dataclasses import dataclass, asdict
 from dotenv import load_dotenv
 
 from dataset import load_dataset, get_formatted_questions
-from model import get_completion
 from answer_evaluator import get_final_selection
+from model import get_completion
 
 load_dotenv()
 
@@ -45,6 +46,9 @@ class ModelEvaluator:
         with open(self.cache_file, 'w') as f:
             json.dump(self.cache, f, indent=2)
 
+    def _get_cache_key(self, question: str) -> str:
+        return hashlib.sha256(question.encode()).hexdigest()
+
     def evaluate_dataset(self, sample_size: Optional[int] = None, force_rerun: List[int] = None) -> EvalResult:
         force_rerun = force_rerun or []
         
@@ -62,9 +66,10 @@ class ModelEvaluator:
         
         try:
             for idx, (id_, question, correct_answer) in enumerate(problems, 1):
-                if str(id_) in self.cache and id_ not in force_rerun:
+                cache_key = self._get_cache_key(question)
+                if cache_key in self.cache and id_ not in force_rerun:
                     self.logger.debug(f"Using cached result for question {id_}")
-                    cached = self.cache[str(id_)]
+                    cached = self.cache[cache_key]
                     self.trace[id_] = cached
                     if cached['model_answer'] == cached['correct_answer']:
                         correct += 1
@@ -86,7 +91,7 @@ class ModelEvaluator:
                     'reasoning': reasoning
                 }
                 
-                self.cache[str(id_)] = result
+                self.cache[cache_key] = result
                 self.trace[id_] = result
                 
                 if model_answer == correct_answer:
@@ -129,7 +134,7 @@ class ModelEvaluator:
         
         if result.mistakes:
             self.logger.info("\nMistake summary:")
-            for mistake in result.mistakes[:5]:  # Show first 5 mistakes
+            for mistake in result.mistakes[:5]:
                 self.logger.info(f"ID {mistake['id']}: Expected {mistake['correct_answer']}, Got {mistake['model_answer']}")
             if len(result.mistakes) > 5:
                 self.logger.info(f"... and {len(result.mistakes) - 5} more mistakes")
